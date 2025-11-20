@@ -194,8 +194,8 @@ def _feature_variants():
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-            transforms.RandomErasing(p=0.25, scale=(0.02, 0.1)),
             transforms.ToTensor(),
+            transforms.RandomErasing(p=0.25, scale=(0.02, 0.1)),
             transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
         ]
     )
