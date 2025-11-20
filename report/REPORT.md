@@ -58,7 +58,7 @@ The rest of the pipeline builds and evaluates two families of classifiers on the
   - `fold_metrics.csv` (all fold‑level accuracy/F1).
   - `summary.csv` (average CV metrics + test accuracy/macro F1 per configuration).
   - `reports/*.json` (full per‑class precision/recall/F1 for the test set).
-  - `models/*.joblib` (trained estimators).
+  - `models/*.pt` (trained PyTorch weights).
   - `plots/mlp_feature_accuracy.png` and `plots/mlp_hparam_accuracy.png`.
 
 ### 3.2 Feature Dimension Sweep
@@ -110,62 +110,18 @@ Fill in values from `outputs/task2/mlp_hparam_sweep/summary.csv`:
 
 ---
 
-## 4. Task 3 – Alternative Models (Random Forest + CNN)
+## 4. Task 3 – CNN（GPU）
 
-Task 3 requires a second modelling approach beyond the MLP baseline. This project offers **two** fully documented backends so you can decide which results to highlight in the report (or include both for extra credit). The Random Forest option mirrors the PCA workflow from Task 2, while the CNN leverages end-to-end representation learning on GPU.
+Task 3 采用与 MLP 不同的第二种方法：ResNet18（PyTorch，GPU）。保持与 Task 2 相同的评估流程：5 折交叉验证、测试集评估、超参/增广 sweep。
 
-### 4.1 Random Forest Experimental Setup
-
-- **Model** – `sklearn.ensemble.RandomForestClassifier`, baseline `n_estimators=400`, unlimited depth, `min_samples_split=2`, `n_jobs=-1`.
-- **Feature Inputs** – Uses exactly the same PCA outputs as Task 2.
-- **Evaluation** – Identical metric export pipeline, stored under `outputs/task3/rf_*`.
-
-### 4.2 Random Forest Feature Dimension Sweep
-
-Populate from `outputs/task3/rf_feature_sweep/summary.csv` and include the plot `rf_feature_accuracy.png`.
-
-| Feature Set | Mean CV Accuracy | Mean CV Macro F1 | Test Accuracy | Test Macro F1 |
-| --- | --- | --- | --- | --- |
-| original | ✅ | ✅ | ✅ | ✅ |
-| pca_70 | ✅ | ✅ | ✅ | ✅ |
-| pca_50 | ✅ | ✅ | ✅ | ✅ |
-| pca_30 | ✅ | ✅ | ✅ | ✅ |
-| pca_10 | ✅ | ✅ | ✅ | ✅ |
-
-**Discussion points:**
-
-- Unlike MLPs, Random Forests can degrade more gracefully with PCA compression because trees benefit from decorrelated inputs but still need sufficient depth to partition the space.
-- Observe whether PCA actually improves accuracy by reducing noise; if so, highlight the best-performing PCA level.
-
-### 4.3 Random Forest Hyper‑Parameter Sweep
-
-Configs:
-
-1. **shallow** – 200 estimators, depth limited to 40 (faster, less overfitting).
-2. **baseline** – inherits global args; unlimited depth.
-3. **regularized** – 600 estimators, depth 60, `min_samples_split` increased to 4.
-
-Fill from `outputs/task3/rf_hparam_sweep/summary.csv`:
-
-| Config | n_estimators | max_depth | min_samples_split | Mean CV Acc. | Mean CV Macro F1 | Test Acc. | Test Macro F1 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| shallow | 200 | 40 | 2 | ✅ | ✅ | ✅ | ✅ |
-| baseline | 400 | ∞ | 2 | ✅ | ✅ | ✅ | ✅ |
-| regularized | 600 | 60 | 4 | ✅ | ✅ | ✅ | ✅ |
-
-### 4.4 Random Forest Insights
-
-- Tree ensembles tend to overfit less dramatically on high‑dimensional sparse data, but training time scales with `n_estimators × depth`. Include wall‑clock notes if available.
-- Report which configuration delivered the best macro F1 and how it compares to the MLP baseline. Typical behaviour: Random Forests match or slightly lag MLP accuracy but have better interpretability and robustness to class imbalance.
-
-### 4.5 CNN Experimental Setup
+### 4.1 CNN Experimental Setup
 
 - **Model** – ResNet18 (torchvision) modified for 32×32 inputs (3×3 stem conv, no initial maxpool) with optional dropout before the final FC layer.
 - **Feature Inputs** – Operates directly on the raw RGB images stored in `dataset.train_images` / `test_images`, with CIFAR normalisation and configurable data augmentation.
 - **Training** – SGD with momentum, cosine annealing schedule, cross-entropy loss, 5-fold stratified CV. Requires an NVIDIA GPU; the script aborts if CUDA is unavailable.
 - **Artifacts** – Written to `outputs/task3/cnn_*` and include `.pt` weight files plus the usual CSV/JSON summaries.
 
-### 4.6 CNN Augmentation Sweep
+### 4.2 CNN Augmentation Sweep
 
 The “feature-dimension” analogue for CNNs is the strength of the augmentation pipeline. Two presets are provided:
 
@@ -193,11 +149,11 @@ Three preset configurations tweak epochs, learning rate, weight decay, and dropo
 
 When copying the numbers, also mention GPU runtime and any signs of under/over-regularisation.
 
-### 4.8 CNN Insights
+### 4.4 CNN Insights
 
 - Strong augmentation + heavier regularisation typically yields better macro F1 on smaller training subsets by preventing the network from memorising noise.
-- CNNs usually surpass Random Forests in absolute accuracy once enough epochs are trained on GPU, but they are more computationally demanding (≈25 epochs × 5 folds per sweep).
-- Highlight any per-class gains (e.g., animals vs. vehicles) relative to the MLP/Random Forest baselines to motivate using learned convolutional features.
+- CNNs usually surpass传统扁平特征模型（如 RF/MLP）在绝对准确率上的表现，但计算量更大（≈25 epochs × 5 folds / 每个 sweep）。
+- Highlight any per-class gains (e.g., animals vs. vehicles) relative to the MLP baselines to motivate using learned convolutional features.
 
 ---
 
@@ -207,30 +163,29 @@ Use the completed tables above to answer the reflective questions. Suggested str
 
 ### 5.1 Accuracy & Generalisation
 
-- Compare the best-performing MLP vs. your chosen Task 3 backend (Random Forest and/or CNN). Discuss:
+- Compare the best-performing GPU MLP vs. CNN. Discuss:
   - Absolute accuracy difference.
   - Macro F1 – indicates class balance handling.
   - Per-class winners (cite JSON metrics or confusion matrix observations).
 
 ### 5.2 Computational Complexity
 
-- **MLP** – GPU‑friendly; time grows with epochs × parameters. Mention actual training time per run (measure with `/usr/bin/time -v` or script logs if available). Highlight that PCA reduces input size but not necessarily training time due to CPU‑bound cross-validation loops.
-- **Random Forest** – CPU‑oriented; training parallelises over `n_jobs=-1`. Complexity roughly `O(T * d * log n)` (T = number of trees, d = depth). Highlight empirical runtime differences after executing on the Linux server.
+- **GPU MLP** – time grows with epochs × parameters; PCA 维度越低，前向/反向更快。提及实际训练耗时（可用 `/usr/bin/time -v` 或日志）。
+- **CNN** – 卷积在 GPU 上高效，但总体计算量更大（图像域 + 数据增强）。记录一次 sweep 的耗时作为对比。
 
 ### 5.3 Overfitting Assessment
 
 - Contrast CV metrics vs. test metrics:
   - If CV accuracy ≈ test accuracy, model generalises well.
-  - Look for cases where CV macro F1 is much higher than test macro F1 to identify overfitting. Typically, deep MLPs might show this pattern; Random Forests with unlimited depth can also overfit unless regularised.
+  - Look for cases where CV macro F1 is much higher than test macro F1 to identify overfitting. Deep MLP/CNN 均可能过拟合，需结合早停/正则化/增广观察。
 
 ### 5.4 Recommendations
 
 Based on observations, answer:
 
-1. **When to prefer MLPs?** e.g., when GPU resources exist, and highest accuracy is required, especially with raw features.
-2. **When to prefer Random Forests?** e.g., CPU‑only environments, faster iteration, interpretability, or smaller datasets.
-3. **When to prefer CNNs?** e.g., when GPUs are available and you need the absolute best accuracy, especially on the original input space without PCA.
-4. **Effect of PCA / augmentation** – Summarise whether moderate PCA (50–70 %) benefits the classical models and how augmentation strength influences the CNN results.
+1. **When to prefer MLPs?** e.g., 当需快速实验、特征为 PCA 扁平向量、内存占用较低时。
+2. **When to prefer CNNs?** e.g., 当 GPU 资源充足且追求最高精度，尤其在原始图像域。
+3. **Effect of PCA / augmentation** – 总结 PCA 对 MLP 的速度/精度折衷，以及增广强度对 CNN 过拟合的影响。
 
 ---
 

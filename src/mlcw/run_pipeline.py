@@ -8,12 +8,8 @@ from typing import Sequence
 
 from .data import load_cifar10
 from .features import FeatureSet, create_feature_sets, dump_feature_metadata
-from .task2_mlp import run_feature_dimension_experiment as mlp_feature_sweep
-from .task2_mlp import run_hparam_experiment as mlp_hparam_sweep
-from .task3_random_forest import (
-    run_feature_dimension_experiment as rf_feature_sweep,
-)
-from .task3_random_forest import run_hparam_experiment as rf_hparam_sweep
+from .task2_mlp_torch import run_feature_dimension_experiment as mlp_feature_sweep
+from .task2_mlp_torch import run_hparam_experiment as mlp_hparam_sweep
 from .task3_cnn import (
     run_feature_variant_experiment as cnn_feature_sweep,
 )
@@ -44,21 +40,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--mlp-max-iter", type=int, default=80)
     parser.add_argument("--mlp-patience", type=int, default=10)
     parser.add_argument("--mlp-no-early-stop", action="store_true")
+    parser.add_argument("--mlp-dropout", type=float, default=0.1)
+    parser.add_argument("--mlp-weight-decay", type=float, default=1e-4)
+    parser.add_argument("--mlp-epochs", type=int, default=80)
+    parser.add_argument("--mlp-pca-patience", type=int, default=10)
 
-    # Random Forest knobs
-    parser.add_argument("--rf-n-estimators", type=int, default=400)
-    parser.add_argument("--rf-max-depth", type=int, default=0)
-    parser.add_argument("--rf-min-samples-split", type=int, default=2)
-    parser.add_argument("--rf-n-jobs", type=int, default=-1)
-
-    # Task 3 backend selection and CNN knobs
-    parser.add_argument(
-        "--task3-backends",
-        nargs="+",
-        choices=["rf", "cnn"],
-        default=["rf"],
-        help="Choose which Task 3 implementations to run.",
-    )
+    # Task 3 (only CNN) knobs
     parser.add_argument("--cnn-epochs", type=int, default=25)
     parser.add_argument("--cnn-batch-size", type=int, default=128)
     parser.add_argument("--cnn-lr", type=float, default=1e-3)
@@ -109,12 +96,11 @@ def main() -> None:
         "max_iter": args.mlp_max_iter,
         "early_stopping": not args.mlp_no_early_stop,
         "n_iter_no_change": args.mlp_patience,
-    }
-    rf_params = {
-        "n_estimators": args.rf_n_estimators,
-        "max_depth": None if args.rf_max_depth <= 0 else args.rf_max_depth,
-        "min_samples_split": args.rf_min_samples_split,
-        "n_jobs": args.rf_n_jobs,
+        "dropout": args.mlp_dropout,
+        "weight_decay": args.mlp_weight_decay,
+        "epochs": args.mlp_epochs,
+        "patience": args.mlp_pca_patience,
+        "learning_rate": args.mlp_lr,
     }
     cnn_params = {
         "epochs": args.cnn_epochs,
@@ -145,23 +131,26 @@ def main() -> None:
             {
                 "name": "compact",
                 "hidden_layer_sizes": (256,),
-                "learning_rate_init": args.mlp_lr * 5,
-                "alpha": args.mlp_alpha * 5,
-                "max_iter": max(40, args.mlp_max_iter - 20),
+                "learning_rate": args.mlp_lr * 2,
+                "weight_decay": args.mlp_weight_decay * 0.5,
+                "dropout": args.mlp_dropout * 0.8,
+                "epochs": max(40, args.mlp_epochs - 20),
             },
             {
                 "name": "baseline",
                 "hidden_layer_sizes": tuple(args.mlp_hidden),
-                "learning_rate_init": args.mlp_lr,
-                "alpha": args.mlp_alpha,
-                "max_iter": args.mlp_max_iter,
+                "learning_rate": args.mlp_lr,
+                "weight_decay": args.mlp_weight_decay,
+                "dropout": args.mlp_dropout,
+                "epochs": args.mlp_epochs,
             },
             {
                 "name": "deep",
                 "hidden_layer_sizes": tuple(list(args.mlp_hidden) + [128]),
-                "learning_rate_init": args.mlp_lr / 2,
-                "alpha": args.mlp_alpha / 2,
-                "max_iter": args.mlp_max_iter + 40,
+                "learning_rate": args.mlp_lr / 2,
+                "weight_decay": args.mlp_weight_decay * 2,
+                "dropout": args.mlp_dropout + 0.05,
+                "epochs": args.mlp_epochs + 30,
             },
         ]
         mlp_hparam_sweep(
@@ -179,101 +168,54 @@ def main() -> None:
         print("Skipping Task 2 as requested.")
 
     if not args.skip_task3:
-        backends = list(dict.fromkeys(args.task3_backends))
-        for backend in backends:
-            if backend == "rf":
-                print("=== Running Task 3 (Random Forest): feature sweep ===")
-                rf_feature_sweep(
-                    feature_sets=feature_sets,
-                    y_train=dataset.y_train,
-                    y_test=dataset.y_test,
-                    class_names=dataset.class_names,
-                    base_params=rf_params,
-                    output_dir=output_root,
-                    cv_splits=args.cv_splits,
-                    random_state=args.random_seed + 13,
-                )
-                print("=== Running Task 3 (Random Forest): hyper parameter sweep ===")
-                rf_hparam_grid = [
-                    {
-                        "name": "shallow",
-                        "n_estimators": max(200, args.rf_n_estimators // 2),
-                        "max_depth": 40,
-                    },
-                    {
-                        "name": "baseline",
-                        "n_estimators": args.rf_n_estimators,
-                        "max_depth": None if args.rf_max_depth <= 0 else args.rf_max_depth,
-                    },
-                    {
-                        "name": "regularized",
-                        "n_estimators": args.rf_n_estimators + 200,
-                        "max_depth": 60,
-                        "min_samples_split": max(2, args.rf_min_samples_split + 2),
-                    },
-                ]
-                rf_hparam_sweep(
-                    feature_set=original_features,
-                    y_train=dataset.y_train,
-                    y_test=dataset.y_test,
-                    class_names=dataset.class_names,
-                    base_params=rf_params,
-                    hparam_grid=rf_hparam_grid,
-                    output_dir=output_root,
-                    cv_splits=args.cv_splits,
-                    random_state=args.random_seed + 37,
-                )
-            elif backend == "cnn":
-                print("=== Running Task 3 (CNN): augmentation sweep ===")
-                cnn_feature_sweep(
-                    train_images=dataset.train_images,
-                    train_labels=dataset.y_train,
-                    test_images=dataset.test_images,
-                    test_labels=dataset.y_test,
-                    class_names=dataset.class_names,
-                    base_params=cnn_params,
-                    output_dir=output_root,
-                    cv_splits=args.cv_splits,
-                    random_state=args.random_seed + 101,
-                )
-                print("=== Running Task 3 (CNN): hyper parameter sweep ===")
-                cnn_hparam_grid = [
-                    {
-                        "name": "fast",
-                        "epochs": max(10, args.cnn_epochs - 10),
-                        "learning_rate": args.cnn_lr * 2,
-                        "weight_decay": args.cnn_weight_decay / 2,
-                        "dropout": max(0.0, args.cnn_dropout - 0.05),
-                    },
-                    {
-                        "name": "baseline",
-                        "epochs": args.cnn_epochs,
-                        "learning_rate": args.cnn_lr,
-                        "weight_decay": args.cnn_weight_decay,
-                        "dropout": args.cnn_dropout,
-                    },
-                    {
-                        "name": "regularized",
-                        "epochs": args.cnn_epochs + 10,
-                        "learning_rate": args.cnn_lr * 0.6,
-                        "weight_decay": args.cnn_weight_decay * 2,
-                        "dropout": args.cnn_dropout + 0.1,
-                    },
-                ]
-                cnn_hparam_sweep(
-                    train_images=dataset.train_images,
-                    train_labels=dataset.y_train,
-                    test_images=dataset.test_images,
-                    test_labels=dataset.y_test,
-                    class_names=dataset.class_names,
-                    base_params=cnn_params,
-                    hparam_grid=cnn_hparam_grid,
-                    output_dir=output_root,
-                    cv_splits=args.cv_splits,
-                    random_state=args.random_seed + 211,
-                )
-            else:
-                raise ValueError(f"Unsupported Task 3 backend: {backend}")
+        print("=== Running Task 3 (CNN): augmentation sweep ===")
+        cnn_feature_sweep(
+            train_images=dataset.train_images,
+            train_labels=dataset.y_train,
+            test_images=dataset.test_images,
+            test_labels=dataset.y_test,
+            class_names=dataset.class_names,
+            base_params=cnn_params,
+            output_dir=output_root,
+            cv_splits=args.cv_splits,
+            random_state=args.random_seed + 101,
+        )
+        print("=== Running Task 3 (CNN): hyper parameter sweep ===")
+        cnn_hparam_grid = [
+            {
+                "name": "fast",
+                "epochs": max(10, args.cnn_epochs - 10),
+                "learning_rate": args.cnn_lr * 2,
+                "weight_decay": args.cnn_weight_decay / 2,
+                "dropout": max(0.0, args.cnn_dropout - 0.05),
+            },
+            {
+                "name": "baseline",
+                "epochs": args.cnn_epochs,
+                "learning_rate": args.cnn_lr,
+                "weight_decay": args.cnn_weight_decay,
+                "dropout": args.cnn_dropout,
+            },
+            {
+                "name": "regularized",
+                "epochs": args.cnn_epochs + 10,
+                "learning_rate": args.cnn_lr * 0.6,
+                "weight_decay": args.cnn_weight_decay * 2,
+                "dropout": args.cnn_dropout + 0.1,
+            },
+        ]
+        cnn_hparam_sweep(
+            train_images=dataset.train_images,
+            train_labels=dataset.y_train,
+            test_images=dataset.test_images,
+            test_labels=dataset.y_test,
+            class_names=dataset.class_names,
+            base_params=cnn_params,
+            hparam_grid=cnn_hparam_grid,
+            output_dir=output_root,
+            cv_splits=args.cv_splits,
+            random_state=args.random_seed + 211,
+        )
     else:
         print("Skipping Task 3 as requested.")
 

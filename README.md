@@ -1,61 +1,54 @@
-## COMP3055 Coursework Experiment Suite
+## COMP3055 Coursework Experiment Suite (GPU)
 
-This repository contains reproducible code for all tasks described in the coursework brief:
+本仓库提供满足课设要求的可复现实验代码：
 
-1. **Task 1** – Loads CIFAR-10 and builds PCA feature sets that retain 10%, 30%, 50%, 70%, and 100% of the variance (plus the standardized original vectors). Metadata is exported to `outputs/task1/feature_metadata.json`.
-2. **Task 2** – Trains an `sklearn.neural_network.MLPClassifier` with two experiment tracks:
-   - *Feature sweep*: evaluates the PCA feature sets with 5-fold stratified cross-validation and test-set reporting.
-   - *Hyper-parameter sweep*: varies the hidden layer layout, learning rate, and regularisation on the original features.
-3. **Task 3** – Provides two alternative models:
-   - *Random Forest* (`sklearn.ensemble.RandomForestClassifier`) mirroring the PCA sweeps from Task 2.
-   - *CNN* (ResNet18 tailored for CIFAR-10) trained end-to-end on the raw images with data-augmentation sweeps and GPU-accelerated hyper-parameter searches.
+1. **Task 1** – 下载/加载 CIFAR-10，构建 PCA 特征集（10%、30%、50%、70%、100% 方差保留），输出到 `outputs/task1/feature_metadata.json`。
+2. **Task 2** – 使用 **PyTorch** 实现的 GPU MLP，在 PCA 特征与原始特征上执行 5 折交叉验证的特征维度 sweep 和超参 sweep，产出 CSV/JSON/模型权重/图表。
+3. **Task 3** – 仅保留 **CNN (ResNet18)**，在原始图像上做数据增强 sweep 和超参 sweep，同样输出 CSV/JSON/权重/图表。
 
-The code is organised as a Python package (`src/mlcw`) so everything can be executed via `python -m mlcw.run_pipeline ...` or the helper shell script below. **All Task 3 variants expect an NVIDIA GPU**; the provided `scripts/run_all.sh` aborts early if `nvidia-smi` is unavailable.
+> 所有训练（Task 2/3）均依赖 NVIDIA GPU，脚本会用 `nvidia-smi` 检查 CUDA。
 
-> **Note:** No virtual environment is created. Install dependencies directly into your preferred Python environment.
-
-### Install Dependencies
+### 依赖安装
 
 ```bash
 python3 -m pip install --user -r requirements.txt
 ```
 
-### Run All Experiments
+（需要预装匹配 CUDA 的 PyTorch 发行版）
+
+### 一键运行
 
 ```bash
 scripts/run_all.sh
 ```
 
-Environment variables or CLI flags can override defaults:
+可用环境变量或 CLI 覆盖默认值：
 
-| Option | Default | Description |
+| 选项 | 默认 | 说明 |
 | --- | --- | --- |
-| `DATA_ROOT` / `--data-root` | `./data` | Download/cache directory for CIFAR-10. |
-| `OUTPUT_ROOT` / `--output-root` | `./outputs` | Where metrics, plots, and trained models are written. |
-| `TRAIN_SUBSET` / `--train-subset` | `10000` | Training subset size. Set to `0` for all 50k images. |
-| `TEST_SUBSET` / `--test-subset` | `2000` | Test subset size. Set to `0` for full 10k test set. |
-| `--pca-targets` | `10 30 50 70 100` | Variance percentages for PCA compression. |
-| `--cv-splits` | `5` | Number of folds for cross-validation. |
-| `--skip-task2`, `--skip-task3` | `False` | Skip MLP or Task 3 experiments entirely. |
-| `TASK3_VARIANTS` / `--task3-backends` | `rf` | Comma-separated list of Task 3 backends to run: `rf`, `cnn`, or both (e.g. `rf,cnn`). |
+| `DATA_ROOT` / `--data-root` | `./data` | CIFAR-10 下载/缓存目录 |
+| `OUTPUT_ROOT` / `--output-root` | `./outputs` | 指标、模型、图表输出目录 |
+| `TRAIN_SUBSET` / `--train-subset` | `10000` | 训练子集大小，`0` 表示用满 50k |
+| `TEST_SUBSET` / `--test-subset` | `2000` | 测试子集大小，`0` 表示用满 10k |
+| `--pca-targets` | `10 30 50 70 100` | PCA 方差保留百分比 |
+| `--cv-splits` | `5` | 交叉验证折数 |
+| `--skip-task2`, `--skip-task3` | `False` | 跳过 MLP 或 CNN 实验 |
 
-Additional MLP / Random Forest / CNN parameters can be passed (see `python -m mlcw.run_pipeline -h`).
+其它 MLP/CNN 超参可通过 `python -m mlcw.run_pipeline -h` 查看。
 
-### Outputs
+### 输出结构
 
 ```
 outputs/
   task1/feature_metadata.json
   task2/
-    mlp_feature_sweep/
-    mlp_hparam_sweep/
-    plots/
+    mlp_feature_sweep/        # CSV/JSON/权重(.pt)
+    mlp_hparam_sweep/         # CSV/JSON/权重(.pt)
+    plots/                    # MLP 相关图表
   task3/
-    rf_feature_sweep/
-    rf_hparam_sweep/
-    cnn_feature_sweep/
-    cnn_hparam_sweep/
-    plots/
+    cnn_feature_sweep/        # CSV/JSON/权重(.pt)
+    cnn_hparam_sweep/         # CSV/JSON/权重(.pt)
+    plots/                    # CNN 相关图表
 ```
 
-Each sub-folder contains CSV summaries (per-fold metrics + aggregated results), JSON classification reports (per class F1, precision, recall), trained model dumps (`joblib` for sklearn models and `.pt` for CNN weights), and the requested plots.
+每个子目录包含 5 折结果、汇总表、测试集分类报告（含各类 F1/精确率/召回率）、训练权重和对应的可视化。运行时需确保 GPU 与 CUDA 驱动就绪。***
