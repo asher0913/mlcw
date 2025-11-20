@@ -23,17 +23,16 @@ scripts/run_all.sh
 2. **Task 2（GPU MLP）**  
    - 特征维度 sweep：在各 PCA 特征上 5 折交叉验证 + 测试评估，结果位于 `outputs/task2/mlp_feature_sweep/`。  
    - 超参 sweep：在原始特征上变换网络深度 / lr / wd / dropout / epoch，结果位于 `outputs/task2/mlp_hparam_sweep/`。  
-   - 模型权重为 `.pt`，分类报告 JSON 含各类 F1。
+  - 输出 CSV/JSON（含 per-class F1），以及精度曲线。
 3. **Task 3（CNN）**  
    - 增广强度 sweep：`standard` vs `strong_aug`，5 折 + 测试集，输出至 `outputs/task3/cnn_feature_sweep/`。  
    - 超参 sweep：fast / baseline / regularized 三套配置，输出至 `outputs/task3/cnn_hparam_sweep/`。  
-   - 权重 `.pt`，分类报告 JSON。
+  - 输出 CSV/JSON（含 per-class F1），以及精度曲线。
 
 ### 产出物
 - `outputs/task*/.../summary.csv`：每组配置的 CV 均值与测试集准确率/宏 F1。
 - `outputs/task*/.../fold_metrics.csv`：每折指标。
 - `outputs/task*/.../reports/*.json`：完整分类报告（含 per-class precision/recall/F1）。
-- `outputs/task*/.../models/*.pt`：训练好的模型权重。
 - `outputs/task*/plots/*.png`：对应的精度对比图。
 
 ### 填写报告建议
