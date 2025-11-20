@@ -237,7 +237,6 @@ def run_feature_dimension_experiment(
     device = _require_gpu()
     sweep_dir = ensure_dir(output_dir / "task2" / "mlp_feature_sweep")
     reports_dir = ensure_dir(sweep_dir / "reports")
-    models_dir = ensure_dir(sweep_dir / "models")
     cv_rows: List[Dict] = []
     summary_rows: List[Dict] = []
     test_metrics_json: Dict[str, Dict] = {}
@@ -276,7 +275,7 @@ def run_feature_dimension_experiment(
         mean_val_acc = float(np.mean([r["val_accuracy"] for r in fold_metrics]))
         mean_val_f1 = float(np.mean([r["val_macro_f1"] for r in fold_metrics]))
 
-        final_model, test_metrics = _evaluate_test(
+        _, test_metrics = _evaluate_test(
             feat.X_train,
             y_train,
             feat.X_test,
@@ -287,7 +286,6 @@ def run_feature_dimension_experiment(
             seed + 999,
         )
         test_metrics_json[feat.name] = test_metrics
-        torch.save(final_model.state_dict(), models_dir / f"mlp_{feat.name}.pt")
         save_json(test_metrics, reports_dir / f"{feat.name}_test_metrics.json")
         summary_rows.append(
             {
@@ -334,7 +332,6 @@ def run_hparam_experiment(
     device = _require_gpu()
     sweep_dir = ensure_dir(output_dir / "task2" / "mlp_hparam_sweep")
     reports_dir = ensure_dir(sweep_dir / "reports")
-    models_dir = ensure_dir(sweep_dir / "models")
     cv_rows: List[Dict] = []
     summary_rows: List[Dict] = []
     test_metrics_json: Dict[str, Dict] = {}
@@ -379,7 +376,7 @@ def run_hparam_experiment(
         mean_val_acc = float(np.mean([r["val_accuracy"] for r in fold_metrics]))
         mean_val_f1 = float(np.mean([r["val_macro_f1"] for r in fold_metrics]))
 
-        final_model, test_metrics = _evaluate_test(
+        _, test_metrics = _evaluate_test(
             feature_set.X_train,
             y_train,
             feature_set.X_test,
@@ -390,7 +387,6 @@ def run_hparam_experiment(
             seed + 777,
         )
         test_metrics_json[name] = test_metrics
-        torch.save(final_model.state_dict(), models_dir / f"mlp_hparam_{name}.pt")
         save_json(test_metrics, reports_dir / f"{name}_test_metrics.json")
         summary_rows.append(
             {

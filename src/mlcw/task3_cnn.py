@@ -229,7 +229,6 @@ def run_feature_variant_experiment(
     device = _require_gpu()
     variant_dir = ensure_dir(output_dir / "task3" / "cnn_feature_sweep")
     reports_dir = ensure_dir(variant_dir / "reports")
-    models_dir = ensure_dir(variant_dir / "models")
     feature_variants = _feature_variants()
     cv_rows: List[Dict] = []
     summary_rows: List[Dict] = []
@@ -325,10 +324,6 @@ def run_feature_variant_experiment(
         preds, truths = _collect_predictions(final_model, test_loader, device)
         test_metrics = classification_metrics(truths, preds, class_names)
         metrics_json[variant["name"]] = test_metrics
-        torch.save(
-            final_model.state_dict(),
-            models_dir / f"cnn_{variant['name']}.pt",
-        )
         save_json(test_metrics, reports_dir / f"{variant['name']}_test_metrics.json")
         summary_rows.append(
             {
@@ -395,7 +390,6 @@ def run_hparam_experiment(
     device = _require_gpu()
     sweep_dir = ensure_dir(output_dir / "task3" / "cnn_hparam_sweep")
     reports_dir = ensure_dir(sweep_dir / "reports")
-    models_dir = ensure_dir(sweep_dir / "models")
     base_variants = _feature_variants()
     baseline_transform = base_variants[0]["train_transform"]
     eval_transform = base_variants[0]["eval_transform"]
@@ -492,7 +486,6 @@ def run_hparam_experiment(
         preds, truths = _collect_predictions(final_model, test_loader, device)
         test_metrics = classification_metrics(truths, preds, class_names)
         metrics_json[name] = test_metrics
-        torch.save(final_model.state_dict(), models_dir / f"cnn_hparam_{name}.pt")
         save_json(test_metrics, reports_dir / f"{name}_test_metrics.json")
         summary_rows.append(
             {
