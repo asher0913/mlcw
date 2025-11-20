@@ -1,5 +1,3 @@
-## COMP3055 Coursework Experiment Suite (GPU)
-
 本仓库提供满足课设要求的可复现实验代码：
 
 1. **Task 1** – 下载/加载 CIFAR-10，构建 PCA 特征集（10%、30%、50%、70%、100% 方差保留），输出到 `outputs/task1/feature_metadata.json`。
